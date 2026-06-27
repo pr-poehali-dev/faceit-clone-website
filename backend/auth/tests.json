@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "Login returns steam url",
+      "method": "GET",
+      "path": "/?action=login&return_url=https://example.com",
+      "expectedStatus": 200,
+      "expectedBody": {"url": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    }
+  ]
+}

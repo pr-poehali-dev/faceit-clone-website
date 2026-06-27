@@ -1,56 +1,16 @@
+import { useEffect, useState } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
+import Matchmaking from '@/components/Matchmaking';
+import Lobby from '@/components/Lobby';
+import ProfileModal from '@/components/ProfileModal';
+import {
+  steamLogin, handleSteamCallback, getProfile, getToken,
+  matchmaking, Profile, MatchState,
+} from '@/lib/api';
 
 const HERO_IMG =
   'https://cdn.poehali.dev/projects/541f49fe-923b-43d8-a255-9f0a291b2052/files/fdf30da7-7f8a-48a0-bb96-c99b6eb02653.jpg';
-
-const matches = [
-  {
-    id: 1,
-    status: 'LIVE',
-    game: 'CS2',
-    map: 'Mirage',
-    t1: 'NAVI', t1score: 12, t1logo: '🐺',
-    t2: 'FaZe', t2score: 9, t2logo: '🔥',
-    viewers: '48.2K',
-  },
-  {
-    id: 2,
-    status: 'LIVE',
-    game: 'Dota 2',
-    map: 'Group Stage',
-    t1: 'Team Spirit', t1score: 1, t1logo: '👻',
-    t2: 'Gaimin', t2score: 1, t2logo: '⚡',
-    viewers: '31.7K',
-  },
-  {
-    id: 3,
-    status: 'FINISHED',
-    game: 'Valorant',
-    map: 'Ascent',
-    t1: 'Sentinels', t1score: 13, t1logo: '🛡️',
-    t2: 'LOUD', t2score: 7, t2logo: '🔊',
-    viewers: '—',
-  },
-  {
-    id: 4,
-    status: 'UPCOMING',
-    game: 'CS2',
-    map: 'BO3 · 21:00',
-    t1: 'G2', t1score: 0, t1logo: '🎯',
-    t2: 'Vitality', t2score: 0, t2logo: '🐝',
-    viewers: '—',
-  },
-];
-
-const leaders = [
-  { rank: 1, name: 'sh1ro', tag: 'Radiant', elo: 3284, change: +42, kd: 1.42, win: 78, avatar: '👑' },
-  { rank: 2, name: 'm0NESY', tag: 'Radiant', elo: 3197, change: +18, kd: 1.38, win: 74, avatar: '🎮' },
-  { rank: 3, name: 'ZywOo', tag: 'Radiant', elo: 3150, change: -12, kd: 1.35, win: 71, avatar: '🦊' },
-  { rank: 4, name: 'donk', tag: 'Immortal', elo: 3088, change: +56, kd: 1.31, win: 69, avatar: '🚀' },
-  { rank: 5, name: 'NiKo', tag: 'Immortal', elo: 3012, change: +7, kd: 1.28, win: 66, avatar: '⭐' },
-  { rank: 6, name: 'Twistzz', tag: 'Immortal', elo: 2945, change: -23, kd: 1.24, win: 63, avatar: '🌀' },
-];
 
 const stats = [
   { label: 'Игроков онлайн', value: '142 580', icon: 'Users' },
@@ -59,17 +19,45 @@ const stats = [
   { label: 'Турниров', value: '316', icon: 'Flame' },
 ];
 
-const ratingHistory = [2710, 2680, 2755, 2820, 2790, 2880, 2940, 2910, 3010, 3088];
-
-const statusStyle: Record<string, string> = {
-  LIVE: 'bg-destructive/20 text-destructive border-destructive/40',
-  FINISHED: 'bg-muted text-muted-foreground border-border',
-  UPCOMING: 'bg-accent/20 text-accent border-accent/40',
-};
+type View = 'home' | 'matchmaking' | 'lobby';
 
 const Index = () => {
-  const max = Math.max(...ratingHistory);
-  const min = Math.min(...ratingHistory);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [view, setView] = useState<View>('home');
+  const [lobby, setLobby] = useState<MatchState | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      await handleSteamCallback();
+      if (getToken()) {
+        const p = await getProfile();
+        setProfile(p);
+        if (p) {
+          const s = await matchmaking('status');
+          if (s.state === 'lobby') { setLobby(s); setView('lobby'); }
+        }
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const onPlay = () => {
+    if (!profile) { steamLogin(); return; }
+    setView('matchmaking');
+  };
+
+  const onLobbyFound = (s: MatchState) => { setLobby(s); setView('lobby'); };
+  const leaveLobby = async () => { await matchmaking('leave'); setLobby(null); setView('home'); };
+  const logout = () => { setProfile(null); setShowProfile(false); };
+
+  if (view === 'matchmaking') {
+    return <Matchmaking onLobby={onLobbyFound} onClose={() => setView('home')} />;
+  }
+  if (view === 'lobby' && lobby) {
+    return <Lobby lobby={lobby} onLeave={leaveLobby} />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
@@ -86,17 +74,30 @@ const Index = () => {
               </span>
             </div>
             <nav className="hidden md:flex items-center gap-6 font-display text-sm tracking-wide uppercase text-muted-foreground">
-              <a className="text-primary" href="#matches">Матчи</a>
-              <a className="hover:text-foreground transition-colors" href="#leaders">Лидеры</a>
+              <a className="text-primary" href="#leaders">Лидеры</a>
               <a className="hover:text-foreground transition-colors" href="#rating">Рейтинг</a>
-              <a className="hover:text-foreground transition-colors" href="#">Турниры</a>
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" className="hidden sm:inline-flex font-display uppercase tracking-wide text-sm">
-              Войти
-            </Button>
-            <Button className="font-display uppercase tracking-wide text-sm clip-corner bg-primary text-primary-foreground hover:bg-primary/90">
+            {profile ? (
+              <button onClick={() => setShowProfile(true)}
+                className="flex items-center gap-3 px-3 py-1.5 border border-border hover:border-primary/60 transition-colors clip-corner">
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded bg-secondary grid place-items-center text-xs font-display">{profile.nickname[0]}</div>
+                )}
+                <span className="font-display uppercase text-sm tracking-wide hidden sm:inline">{profile.nickname}</span>
+                <span className="font-display font-bold text-primary text-sm">{profile.elo}</span>
+              </button>
+            ) : (
+              <Button onClick={steamLogin}
+                className="font-display uppercase tracking-wide text-sm clip-corner bg-primary text-primary-foreground hover:bg-primary/90">
+                <Icon name="Gamepad2" size={16} className="mr-2" /> Войти через Steam
+              </Button>
+            )}
+            <Button onClick={onPlay}
+              className="font-display uppercase tracking-wide text-sm clip-corner bg-accent text-accent-foreground hover:bg-accent/90">
               Играть
             </Button>
           </div>
@@ -121,16 +122,20 @@ const Index = () => {
               на <span className="text-primary text-glow">арене</span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-xl">
-              Соревновательный матчмейкинг, честный Elo-рейтинг и прогноз твоего ранга.
-              Поднимайся в таблице лидеров и забирай призы.
+              Соревновательный матчмейкинг 5х5, честный Elo-рейтинг и прогноз твоего ранга.
+              Заходи через Steam и забирай первую победу.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Button size="lg" className="font-display uppercase tracking-wide clip-corner bg-primary text-primary-foreground hover:bg-primary/90 neon-border">
+              <Button size="lg" onClick={onPlay}
+                className="font-display uppercase tracking-wide clip-corner bg-primary text-primary-foreground hover:bg-primary/90 neon-border">
                 <Icon name="Swords" size={18} className="mr-2" /> Найти матч
               </Button>
-              <Button size="lg" variant="outline" className="font-display uppercase tracking-wide border-border hover:border-primary hover:text-primary">
-                Смотреть трансляции
-              </Button>
+              {!profile && (
+                <Button size="lg" variant="outline" onClick={steamLogin}
+                  className="font-display uppercase tracking-wide border-border hover:border-primary hover:text-primary">
+                  <Icon name="Gamepad2" size={18} className="mr-2" /> Войти через Steam
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -149,148 +154,64 @@ const Index = () => {
         </div>
       </section>
 
-      {/* MATCHES */}
-      <section id="matches" className="container py-16">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div className="font-display text-primary uppercase tracking-widest text-sm mb-1">Лента матчей</div>
-            <h2 className="font-display font-bold text-3xl md:text-4xl uppercase tracking-tight">Сейчас в игре</h2>
-          </div>
-          <a href="#" className="font-display uppercase text-sm tracking-wide text-muted-foreground hover:text-primary transition-colors hidden sm:flex items-center gap-1">
-            Все матчи <Icon name="ChevronRight" size={16} />
-          </a>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          {matches.map((m) => (
-            <div
-              key={m.id}
-              className="group relative bg-card border border-border p-5 hover:border-primary/60 transition-colors clip-corner"
-            >
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <span className={`px-2 py-0.5 text-xs font-display uppercase tracking-wider border ${statusStyle[m.status]} ${m.status === 'LIVE' ? 'animate-pulse-neon' : ''}`}>
-                    {m.status === 'LIVE' ? '● LIVE' : m.status}
-                  </span>
-                  <span className="font-display uppercase text-sm tracking-wide text-muted-foreground">{m.game}</span>
-                </div>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Icon name="Eye" size={14} /> {m.viewers}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{m.t1logo}</span>
-                  <span className="font-display font-semibold text-lg uppercase tracking-wide truncate">{m.t1}</span>
-                </div>
-                <div className="text-center">
-                  <div className="font-display font-bold text-3xl tracking-tight">
-                    <span className={m.t1score >= m.t2score ? 'text-primary' : 'text-muted-foreground'}>{m.t1score}</span>
-                    <span className="text-muted-foreground mx-1">:</span>
-                    <span className={m.t2score > m.t1score ? 'text-primary' : 'text-muted-foreground'}>{m.t2score}</span>
-                  </div>
-                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground mt-1">{m.map}</div>
-                </div>
-                <div className="flex items-center gap-3 justify-end">
-                  <span className="font-display font-semibold text-lg uppercase tracking-wide truncate">{m.t2}</span>
-                  <span className="text-2xl">{m.t2logo}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* LEADERBOARD + RATING */}
-      <section className="container pb-20 grid lg:grid-cols-[1.4fr_1fr] gap-6">
+      <section className="container py-16 grid lg:grid-cols-[1.4fr_1fr] gap-6">
         {/* Leaderboard */}
         <div id="leaders">
           <div className="font-display text-accent uppercase tracking-widest text-sm mb-1">Рейтинг</div>
           <h2 className="font-display font-bold text-3xl uppercase tracking-tight mb-6">Таблица лидеров</h2>
 
           <div className="border border-border bg-card">
-            <div className="grid grid-cols-[40px_1fr_80px_70px_60px] md:grid-cols-[50px_1fr_100px_80px_80px] gap-2 px-4 py-3 border-b border-border text-xs font-display uppercase tracking-wider text-muted-foreground">
+            <div className="grid grid-cols-[50px_1fr_100px] gap-2 px-4 py-3 border-b border-border text-xs font-display uppercase tracking-wider text-muted-foreground">
               <span>#</span><span>Игрок</span><span className="text-right">Elo</span>
-              <span className="text-right hidden md:block">K/D</span><span className="text-right">Win%</span>
             </div>
-            {leaders.map((p) => (
-              <div
-                key={p.rank}
-                className="grid grid-cols-[40px_1fr_80px_70px_60px] md:grid-cols-[50px_1fr_100px_80px_80px] gap-2 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
-              >
-                <span className={`font-display font-bold text-lg ${p.rank <= 3 ? 'text-primary text-glow' : 'text-muted-foreground'}`}>
-                  {p.rank}
-                </span>
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-xl">{p.avatar}</span>
-                  <div className="min-w-0">
-                    <div className="font-display font-semibold uppercase tracking-wide truncate">{p.name}</div>
-                    <div className="text-[11px] uppercase tracking-wider text-accent">{p.tag}</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-display font-bold">{p.elo}</div>
-                  <div className={`text-[11px] flex items-center justify-end gap-0.5 ${p.change >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                    <Icon name={p.change >= 0 ? 'TrendingUp' : 'TrendingDown'} size={11} />
-                    {p.change >= 0 ? '+' : ''}{p.change}
-                  </div>
-                </div>
-                <span className="text-right font-mono text-sm hidden md:block">{p.kd}</span>
-                <span className="text-right font-display font-semibold text-accent">{p.win}%</span>
-              </div>
-            ))}
+            <div className="px-4 py-16 text-center">
+              <Icon name="Trophy" size={40} className="text-muted-foreground/40 mx-auto mb-4" />
+              <div className="font-display uppercase tracking-wide text-muted-foreground">Пока нет игроков</div>
+              <div className="text-sm text-muted-foreground/70 mt-1">Сыграй первый матч и займи топ-1</div>
+            </div>
           </div>
         </div>
 
-        {/* Rating prediction card */}
+        {/* Rating card */}
         <div id="rating">
           <div className="font-display text-primary uppercase tracking-widest text-sm mb-1">Прогноз</div>
           <h2 className="font-display font-bold text-3xl uppercase tracking-tight mb-6">Твой рейтинг</h2>
 
           <div className="border border-border bg-card p-6 clip-corner neon-border">
-            <div className="flex items-end justify-between mb-1">
-              <span className="font-display uppercase tracking-wide text-muted-foreground text-sm">Текущий Elo</span>
-              <span className="text-xs px-2 py-0.5 border border-accent/40 text-accent uppercase tracking-wider">Immortal</span>
-            </div>
-            <div className="font-display font-bold text-5xl tracking-tight text-primary text-glow mb-1">3 088</div>
-            <div className="text-sm text-primary flex items-center gap-1 mb-6">
-              <Icon name="TrendingUp" size={14} /> +56 за последние 10 матчей
-            </div>
-
-            {/* Mini chart */}
-            <div className="relative h-28 flex items-end gap-1 mb-2">
-              {ratingHistory.map((v, i) => {
-                const h = ((v - min) / (max - min)) * 100;
-                const last = i === ratingHistory.length - 1;
-                return (
-                  <div key={i} className="flex-1 flex flex-col justify-end group">
-                    <div
-                      className={`w-full transition-all ${last ? 'bg-primary animate-pulse-neon' : 'bg-primary/30 group-hover:bg-primary/60'}`}
-                      style={{ height: `${Math.max(h, 6)}%` }}
-                    />
+            {profile ? (
+              <>
+                <div className="flex items-end justify-between mb-1">
+                  <span className="font-display uppercase tracking-wide text-muted-foreground text-sm">Текущий Elo</span>
+                  <span className="text-xs px-2 py-0.5 border border-accent/40 text-accent uppercase tracking-wider">
+                    {profile.elo >= 2000 ? 'Immortal' : profile.elo >= 1000 ? 'Gold' : 'Rookie'}
+                  </span>
+                </div>
+                <div className="font-display font-bold text-5xl tracking-tight text-primary text-glow mb-1">{profile.elo}</div>
+                <div className="text-sm text-muted-foreground flex items-center gap-1 mb-6">
+                  <Icon name="Swords" size={14} /> {profile.matches} матчей сыграно
+                </div>
+                <div className="border-t border-border pt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-display uppercase tracking-wide text-sm text-muted-foreground">До след. ранга</span>
+                    <span className="font-display font-bold text-accent">{Math.max(0, 1000 - profile.elo)} Elo</span>
                   </div>
-                );
-              })}
-            </div>
-            <div className="flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground mb-6">
-              <span>10 матчей назад</span><span>сейчас</span>
-            </div>
-
-            {/* Next rank prediction */}
-            <div className="border-t border-border pt-5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-display uppercase tracking-wide text-sm text-muted-foreground">До ранга Radiant</span>
-                <span className="font-display font-bold text-accent">62 Elo</span>
+                  <div className="h-2 bg-secondary overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-primary to-accent"
+                         style={{ width: `${Math.min(100, (profile.elo / 1000) * 100)}%` }} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <Icon name="Gamepad2" size={40} className="text-muted-foreground/40 mx-auto mb-4" />
+                <div className="font-display uppercase tracking-wide text-muted-foreground mb-4">Войди, чтобы увидеть рейтинг</div>
+                <Button onClick={steamLogin}
+                  className="font-display uppercase tracking-wide clip-corner bg-primary text-primary-foreground hover:bg-primary/90">
+                  Войти через Steam
+                </Button>
               </div>
-              <div className="h-2 bg-secondary overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-primary to-accent" style={{ width: '84%' }} />
-              </div>
-              <div className="mt-3 text-sm text-muted-foreground flex items-center gap-2">
-                <Icon name="Sparkles" size={14} className="text-accent" />
-                Прогноз: <span className="text-foreground">~4 победы</span> до повышения
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </section>
@@ -314,6 +235,21 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      {showProfile && profile && (
+        <ProfileModal
+          profile={profile}
+          onClose={() => setShowProfile(false)}
+          onUpdate={setProfile}
+          onLogout={logout}
+        />
+      )}
+
+      {loading && (
+        <div className="fixed bottom-4 right-4 text-xs text-muted-foreground font-mono opacity-50">
+          подключение...
+        </div>
+      )}
     </div>
   );
 };
